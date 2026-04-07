@@ -2,3 +2,4 @@ pdfplumber
 pandas
 tqdm
 numpy
+ollama

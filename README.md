@@ -36,7 +36,7 @@ Pipeline:
 
 ```bash
 pip install -r requirements.txt
-python -m src.main
+python -m src.main --input data/input/sample.pdf --output data/output/result.json
 ```
 
 ## License
