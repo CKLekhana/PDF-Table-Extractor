@@ -5,3 +5,4 @@ data/output/*
 data/candidate_dataset_generation/*
 data/candidates.csv
 data/output_with_page/*
+data/output_advanced_pipeline/*
