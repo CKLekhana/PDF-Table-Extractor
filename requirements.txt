@@ -3,3 +3,8 @@ pandas
 tqdm
 numpy
 ollama
+camelot-py[cv]
+img2table[easyocr]
+easyocr
+python-mupdf
+pdf2image
