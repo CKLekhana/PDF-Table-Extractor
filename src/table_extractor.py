@@ -1,81 +1,57 @@
 import camelot
+from src.header_extractor import extract_true_header
 
-def extract_tables(page):
-    tables = page.find_tables()
-    
-    results = []
-    i = 0
-    for t in tables:
-        data = t.extract()
-        results.append({
-            "bbox": t.bbox,
-            "data": data
-        })
-        print(f"table {i} : \n \t{data} \n")
-        i = i + 1
-        
-    visualize_extraction(page, tables)
-    
-    return results
-
+# For OCR
+import easyocr
+from pdf2image import convert_from_path
+import numpy as np
 
 def extract_tables_camelot(pdf_path, page_number):
-
-    tables = camelot.read_pdf(
-        pdf_path,
-        pages=str(page_number),
-        flavor="lattice"
-    )
-
+    tables = camelot.read_pdf(pdf_path, pages=str(page_number), flavor="lattice")
+    if not tables:
+        # fallback: stream flavor
+        tables = camelot.read_pdf(pdf_path, pages=str(page_number), flavor="stream")
+        
     results = []
 
     for table in tables:
         df = table.df
+        all_data = df.values.tolist() if not df.empty else []
 
-        # Convert dataframe to list
-        data = df.values.tolist() if not df.empty else []
+        # Extract header and its index
+        headers, header_idx = extract_true_header(all_data)
 
-        # Extract headers safely
-        headers = data[0] if data else []
+        # Fix headers with \n inside cells
+        #if headers:
+        #    new_headers = []
+        #    for h in headers:
+        #        new_headers.extend(str(h).split("\n"))
+        #    headers = [c.strip() for c in new_headers if c.strip()]
 
+        # Data rows below header
+        data = all_data[header_idx + 1:] if header_idx != -1 else all_data
+        print(headers)
         results.append({
-            "data": data,
+            "data": all_data,
             "headers": headers,
-            "accuracy": table.parsing_report.get("accuracy"),
-            "whitespace": table.parsing_report.get("whitespace"),
-            "bbox": None  # Camelot limitation
+            "first_row": data[0] if data else [],
+            "last_row": data[-1] if data else [],
+            "confidence": table.parsing_report.get("accuracy"),
+            "source": "camelot"
         })
-        
 
     return results
 
-def visualize_extraction(page, results, margin=100):
+
+# Initialize EasyOCR once
+reader = easyocr.Reader(['en'])
+
+def extract_text_from_scanned_page(pdf_path, page_num):
     """
-    page: The pdfplumber page object
-    results: The list of dicts from your extract_tables function
+    OCR a single scanned PDF page and return text.
     """
-    # Using 'with' ensures the temp files are released immediately after saving
-    with page.to_image(resolution=150) as img:
-        for t in results:
-            # Use dictionary access [] since your extract_tables returns a dict
-            bbox = t["bbox"]
-            x0, top, x1, bottom = bbox
-            
-            # 2. Draw the Table Bounding Box (Red)
-            img.draw_rect(bbox, stroke="red", stroke_width=3)
-            
-            # 3. Draw the Context/Margin Areas (Blue)
-            # Above margin area
-            above_rect = (0, max(0, top - margin), page.width, top)
-            img.draw_rect(above_rect, stroke="blue", stroke_width=1)
-            
-            # Below margin area
-            below_rect = (0, bottom, page.width, min(page.height, bottom + margin))
-            img.draw_rect(below_rect, stroke="blue", stroke_width=1)
-            
-        # 4. Save the result
-        import os
-        os.makedirs("data/output", exist_ok=True) # Ensure directory exists
-        img.save("data/output/debug_tables.png")
-    
-    # After the 'with' block, the file is no longer "in use" by Python.
+    images = convert_from_path(pdf_path, first_page=page_num, last_page=page_num)
+    img = images[0]
+    img_np = np.array(img)
+    text_list = reader.readtext(img_np, detail=0)
+    return " ".join(text_list)

@@ -1,3 +1,4 @@
+
 def is_text(cell):
     if not cell:
         return False
@@ -12,6 +13,45 @@ def is_text(cell):
 def score_header_row(row):
     if not row:
         return -1
+
+    # 1️⃣ Split multi-line cells into separate pseudo-cells
+    cells = []
+    for c in row:
+        if not c:
+            continue
+        parts = str(c).split("\n")
+        cells.extend([p.strip() for p in parts if p.strip()])
+
+    num_cells = len(cells)
+    # print(cells)  # optional debug
+    if num_cells < 2:
+        return -1  # header must have multiple columns
+
+    score = 0
+
+    # ✅ more columns = better
+    score += num_cells
+
+    # ✅ text-heavy cells
+    text_cells = sum(1 for c in cells if is_text(c))
+    score += text_cells * 2
+
+    # ✅ short phrases (typical headers)
+    short_cells = sum(1 for c in cells if len(c.split()) <= 3)
+    score += short_cells
+
+    # ❌ penalize numeric-heavy cells
+    numeric_cells = sum(1 for c in cells if not is_text(c))
+    score -= numeric_cells * 2
+
+    return score
+
+'''
+def score_header_row(row):
+    if not row:
+        return -1
+
+
 
     cells = [str(c).strip() for c in row if c and str(c).strip()]
     num_cells = len(cells)
@@ -37,7 +77,7 @@ def score_header_row(row):
     score -= num_cells_count * 2
 
     return score
-
+'''
 
 def extract_true_header(table_data):
     if not table_data:

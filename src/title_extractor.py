@@ -1,6 +1,5 @@
 import re
 
-
 # ---------- Helpers ----------
 
 def is_text_heavy(cell):
@@ -31,6 +30,171 @@ def clean_lines(lines):
 
     return cleaned
 
+# ---------- Step 1: Find text-heavy column ----------
+
+def find_text_column(table_data):
+    if not table_data:
+        return 0
+
+    num_cols = max(len(row) for row in table_data if row)
+
+    scores = [0] * num_cols
+
+    for row in table_data[:5]:  # only top rows
+        for i in range(len(row)):
+            if is_text_heavy(row[i]):
+                scores[i] += 1
+
+    # pick column with highest text score
+    return scores.index(max(scores)) if scores else 0
+
+
+# ---------- Step 2: Extract candidates from that column ----------
+
+def extract_column_candidates(table_data):
+    col_idx = find_text_column(table_data)
+
+    lines = []
+
+    for row in table_data[:5]:
+        if len(row) > col_idx and row[col_idx]:
+            parts = str(row[col_idx]).split("\n")
+            lines.extend(parts)
+
+    return clean_lines(lines)
+
+
+# ---------- Step 3: Extract from context (fallback) ----------
+
+def extract_context_candidates(context_text):
+    if not context_text:
+        return []
+
+    lines = context_text.split("\n")
+    lines = [l.strip() for l in lines if l.strip()]
+
+    return clean_lines(lines[-5:])  # last few lines above table
+
+
+# ---------- Step 4: Pick best candidate ----------
+
+def pick_best(lines):
+    if not lines:
+        return None
+
+    # choose longest meaningful line
+    return max(lines, key=len)
+
+
+# ----- Step 5: Score the candidates
+
+def score_title_candidate(line):
+    score = 0
+    line = line.strip()
+
+    if not line:
+        return -1
+
+    # length (titles are longer)
+    if len(line) > 15:
+        score += 2
+
+    # penalize very short (headers)
+    if len(line.split()) <= 3:
+        score -= 2
+
+    # date presence → strong title signal
+    if re.search(r"\d{2}[./-]\d{2}[./-]\d{2,4}", line):
+        score += 3
+
+    # numeric-heavy → likely data/header
+    num_ratio = sum(c.isdigit() for c in line) / max(len(line), 1)
+    if num_ratio > 0.3:
+        score -= 2
+
+    # contains multiple words → good
+    if len(line.split()) > 4:
+        score += 2
+
+    # ---------- NEW: uppercase bonus ----------
+    # all uppercase
+    if line.isupper():
+        score += 3
+
+    # title case (each word starts uppercase)
+    elif all(w[0].isupper() for w in line.split() if w):
+        score += 2
+
+    return score
+
+
+# ---------- Final API ----------
+
+def extract_title(context_text, table_data):
+
+    candidates = []
+
+    # --- from column ---
+    col_candidates = extract_column_candidates(table_data)
+    candidates.extend(col_candidates)
+
+    # --- from context ---
+    context_candidates = extract_context_candidates(context_text)
+    candidates.extend(context_candidates)
+
+    if not candidates:
+        # fallback → header stitch
+        if table_data:
+            return " ".join([str(c) for c in table_data[0] if c])
+        return "Untitled Table"
+
+    # --- score all ---
+    best_line = None
+    best_score = -999
+
+    for line in candidates:
+        s = score_title_candidate(line)
+
+        if s > best_score:
+            best_score = s
+            best_line = line
+
+    return best_line
+
+
+
+'''import re
+
+
+# ---------- Helpers ----------
+
+def is_text_heavy(cell):
+    if not cell:
+        return False
+    text = str(cell)
+    num_ratio = sum(c.isdigit() for c in text) / max(len(text), 1)
+    return num_ratio < 0.3  # mostly text
+
+
+def clean_lines(lines):
+    cleaned = []
+    for line in lines:
+        line = line.strip()
+
+        if not line:
+            continue
+
+        if len(line) < 5:
+            continue
+
+        # skip numeric-heavy lines
+        num_ratio = sum(c.isdigit() for c in line) / max(len(line), 1)
+        if num_ratio > 0.4:
+            continue
+
+        cleaned.append(line)
+
+    return cleaned
 
 # ---------- Step 1: Find text-heavy column ----------
 
@@ -152,7 +316,7 @@ def extract_title(context_text, table_data):
 
     return best_line
 
-
+'''
 '''
 # the heuristics and the logic was poor to get any kind of good results
 import re
