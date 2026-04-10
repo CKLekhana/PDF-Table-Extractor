@@ -2,7 +2,4 @@ __pycache__/
 *.pyc
 .env
 data/output/*
-data/candidate_dataset_generation/*
-data/candidates.csv
 data/true_output/*
-data/bbox/*
