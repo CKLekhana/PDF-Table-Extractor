@@ -116,8 +116,9 @@ cd PDF-Table-Extractor
 
 ### 2. Install Dependencies and activate environment
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
 cd .venv/Scripts/activate.bat
+pip install -r requirements.txt
 ```
 
 ### 3. Table Title and Page number extraction logic uses local Ollama model 

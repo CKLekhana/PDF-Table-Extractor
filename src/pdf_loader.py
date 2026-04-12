@@ -1,6 +1,5 @@
 import pdfplumber
 
-
 def normalize_text(text):
     return " ".join(text.split())
 
@@ -60,7 +59,7 @@ def load_pdf(pdf_path):
                 "lines": lines,
                 "image": None  # optional: fill if needed later
             })
-
+            
     return pages_data
 
 

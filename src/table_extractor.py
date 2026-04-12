@@ -3,6 +3,8 @@ import numpy as np
 from ultralytics import YOLO
 from pdf2image import convert_from_path
 from PIL import Image
+import tempfile
+import os
 
 def extract_tables(input_path, pages_data):
     tables = extract_tables_camelot(input_path, pages_data)
@@ -13,6 +15,7 @@ def extract_tables(input_path, pages_data):
     return tables
 
 def extract_tables_camelot(input_path, pages_data):
+    
     tables = camelot.read_pdf(input_path, pages="all", flavor='lattice')
     
     results = []
@@ -106,7 +109,13 @@ def extract_tables_yolov8(input_path, pages_data):
                     "accuracy": conf,
                     "source": "yolov8"
                 })
+                
+        image.close()
 
+    del images
+    
+    
+    
     return tables
 
 def scale_bbox_to_pdf(bbox, img_width, img_height, pdf_width, pdf_height):
