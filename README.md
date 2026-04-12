@@ -138,13 +138,52 @@ ollama pull llama3.2:3b
 
 ### 4. Run the pipeline
 ```bash 
-python -m src.main --input <input_pdf_path> --output <output_json_path>
+python -m <main_file_path> --input <input_pdf_path> --output <output_json_path>
 ```
 
 ### Example
 ```bash 
-python -m src.main --input Data/input/Document1.pdf --output Data/output/Document1.json
+python -m src.main --input Data/input/Document1.pdf --output results/Document1.json
 ```
+
+The outputs (in JSON format) obtained by executing the pipeline for all sample pdfs can be found in the `results` folder.
+
+### Sample Output
+For the first document Document1.pdf, the output is stored in the following format in the results folder. 
+```json
+[
+  {
+    "title": "Balance Sheet As On 31.03.2023",
+    "page_start": 1,
+    "page_end": 1,
+    "num_pages": 1,
+    "table accuracy": 98.2942337135915
+  },
+  {
+    "title": "CAPITAL ACCOUNT FOR THE PERIOD ENDED 31.03.2023",
+    "page_start": 2,
+    "page_end": 2,
+    "num_pages": 1,
+    "table accuracy": 83.0349607015077
+  },
+  {
+    "title": "Profit and Loss Account for the Year Ended 31st March, 2023",
+    "page_start": 3,
+    "page_end": 3,
+    "num_pages": 1,
+    "table accuracy": 93.89210237118075
+  }
+]
+```
+
+### Known Issue
+
+* `PermissionError (WinError 32)` may occur on Windows when temporary files like `page-*.pdf` cannot be deleted.
+* Likely caused by a subprocess from a third-party library (e.g., Camelot/Ghostscript) holding file locks.
+* Fix attempts included explicit cleanup (`del`, `gc.collect()`), adding delays, and modifying table extraction logic.
+* Issue still occurs intermittently and is under investigation.
+
+> **Note:** This issue does not affect the pipeline output and can be safely ignored until a permanent fix is implemented.
 
 
 ## Results & Performance Analysis

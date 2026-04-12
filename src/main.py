@@ -1,10 +1,15 @@
+# ignoring warnings
+import warnings
+from cryptography.utils import CryptographyDeprecationWarning
+
+warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
+
+# Libraries and imports
 import json
 import argparse
-from pdf2image import convert_from_path
 
 from src.pdf_loader import load_pdf
 from src.table_extractor import extract_tables
-from src.map_text_to_tables import match_lines_to_table
 from src.page_header_footer_detector import extract_header_footer
 from src.title_page_number_extractor import extract_title_and_page_llm
 from src.table_merger import merge_multipage_tables, collect_group_candidates_v2, deduplicate, merge_after_llm

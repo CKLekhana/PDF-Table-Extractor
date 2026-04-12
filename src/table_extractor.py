@@ -5,6 +5,7 @@ from pdf2image import convert_from_path
 from PIL import Image
 import tempfile
 import os
+import gc
 
 def extract_tables(input_path, pages_data):
     tables = extract_tables_camelot(input_path, pages_data)
@@ -19,25 +20,35 @@ def extract_tables_camelot(input_path, pages_data):
     tables = camelot.read_pdf(input_path, pages="all", flavor='lattice')
     
     results = []
-    
-    for table in tables:
-        page_index = table.page - 1  # camelot is 1-based
-        page_height = pages_data[page_index]["height"]
 
-        bbox = camelot_bbox_to_pdfplumber(table._bbox, page_height)
+    for i in range(len(pages_data)):
+        tables = camelot.read_pdf(
+            input_path,
+            pages=str(i + 1),
+            flavor="lattice"
+        )
 
-        table_info = {
-            "page_index": page_index,
-            "bbox": bbox,
-            "header": table.data[0] if table.data else [],
-            "n_cols": len(table.data[0]) if table.data else 0,
-            "accuracy": table.accuracy, 
-            "page_height" : page_height
-        }
+        for table in tables:
+            page_index = table.page - 1
+            page_height = pages_data[page_index]["height"]
 
-        results.append(table_info)
-        
+            bbox = camelot_bbox_to_pdfplumber(table._bbox, page_height)
+
+            results.append({
+                "page_index": page_index,
+                "bbox": bbox,
+                "header": table.data[0] if table.data else [],
+                "n_cols": len(table.data[0]) if table.data else 0,
+                "accuracy": table.accuracy,
+                "page_height": page_height
+            })
+
+        del tables
+        gc.collect()   # 🚨 force cleanup EACH PAGE
+
     return results
+
+
 
 
 
