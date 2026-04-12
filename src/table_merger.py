@@ -142,6 +142,41 @@ def collect_group_candidates(group, pages, page_header_footer):
 
     return all_candidates, all_headers, all_footers, group_accuracy
 
+def collect_group_candidates_v2(group, pages, page_header_footer):
+    all_candidates = []
+    all_headers = []
+    all_footers = []
+    accuracies = []
+
+    for table in group["tables"]:
+        page_index = table["page_index"]
+        table_bbox = table["bbox"]
+        page_data = pages[page_index]
+
+        matched = match_lines_to_table(page_data, table_bbox)
+
+        # 🔥 ONLY above + inside (NO below)
+        above_lines = [m["text"] for m in matched.get("above", [])]
+        inside_lines = [m["text"] for m in matched.get("inside", [])]
+
+        # 🔥 Maintain priority (important for LLM)
+        all_candidates.extend(above_lines + inside_lines)
+
+        # Header/Footer
+        header_lines = page_header_footer[page_index]["header"]
+        footer_lines = page_header_footer[page_index]["footer"]
+
+        all_headers.extend([l["text"] for l in header_lines])
+        all_footers.extend([l["text"] for l in footer_lines])
+
+        # Accuracy aggregation
+        acc = table.get("accuracy")
+        if acc is not None:
+            accuracies.append(acc)
+
+    group_accuracy = sum(accuracies) / len(accuracies) if accuracies else None
+
+    return all_candidates, all_headers, all_footers, group_accuracy
 
 # ---------- Deduplication ----------
 
@@ -159,63 +194,111 @@ def deduplicate(lines):
 
 
 # Post title and pg no extraction merging 
+
+# ---------- Similarity ----------
+
 def title_similarity(t1, t2):
     if not t1 or not t2:
         return 0
-    return SequenceMatcher(None, t1.lower(), t2.lower()).ratio()
+    return SequenceMatcher(None, t1.lower().strip(), t2.lower().strip()).ratio()
+
+
+# ---------- Title Strength ----------
 
 def is_strong_title(title):
     if not title:
         return False
 
-    title = title.lower()
+    title = title.lower().strip()
+    words = title.split()
 
-    weak_words = ["table", "data", "summary"]
-    
-    return not any(w in title for w in weak_words) and len(title) > 10
+    # Too short → weak
+    if len(words) < 2:
+        return False
+
+    # Weak/generic patterns
+    weak_words = ["table", "data", "summary", "report"]
+
+    if any(w in title and len(words) <= 4 for w in weak_words):
+        return False
+
+    # Numeric-heavy → bad title
+    num_ratio = sum(c.isdigit() for c in title) / max(len(title), 1)
+    if num_ratio > 0.3:
+        return False
+
+    return True
+
+
+# ---------- Merge Condition ----------
+
+def should_merge_post_llm(prev, curr):
+
+    # 1. Page adjacency (STRICT)
+    if prev["page_end"] + 1 != curr["page_start"]:
+        return False
+
+    # 2. Strong titles required
+    if not (is_strong_title(prev["title"]) and is_strong_title(curr["title"])):
+        return False
+
+    # 3. Title similarity (STRICT)
+    sim = title_similarity(prev["title"], curr["title"])
+    if sim < 0.88:   # tuned threshold
+        return False
+
+    # 4. Length sanity (avoid merging very different titles)
+    if abs(len(prev["title"]) - len(curr["title"])) > 40:
+        return False
+
+    return True
+
+
+# ---------- Merge Logic ----------
 
 def merge_after_llm(results):
+    """
+    Input format expected:
+    [
+        {
+            "title": str,
+            "page_start": int,
+            "page_end": int,
+            "llm_confidence": float (optional),
+            ...
+        }
+    ]
+    """
+
     if not results:
         return []
 
+    # Sort by page_start
     results = sorted(results, key=lambda x: x["page_start"])
 
     merged = []
-    i = 0
+    current = results[0].copy()
 
-    while i < len(results):
-        current = results[i]
-        j = i + 1
+    for nxt in results[1:]:
 
-        while j < len(results):
-            next_table = results[j]
+        if should_merge_post_llm(current, nxt):
 
-            # Check adjacency
-            if current["page_end"] + 1 != next_table["page_start"]:
-                break
+            # 🔥 Merge pages
+            current["page_end"] = nxt["page_end"]
 
-            # Check title strength
-            if not (is_strong_title(current["title"]) and is_strong_title(next_table["title"])):
-                break
+            # 🔥 Merge accuracy if exists
+            if "table_accuracy" in current and "table_accuracy" in nxt:
+                acc1 = current.get("table_accuracy") or 0
+                acc2 = nxt.get("table_accuracy") or 0
+                current["table_accuracy"] = (acc1 + acc2) / 2
 
-            # Check title similarity
-            if title_similarity(current["title"], next_table["title"]) < 0.85:
-                break
+        else:
+            merged.append(current)
+            current = nxt.copy()
 
-            # ✅ Merge
-            current["page_end"] = next_table["page_end"]
-
-            # Keep better title (longer)
-            if len(next_table["title"]) > len(current["title"]):
-                current["title"] = next_table["title"]
-
-            # Merge confidence if exists
-            if "confidence" in current and "confidence" in next_table:
-                current["confidence"] = (current["confidence"] + next_table["confidence"]) / 2
-
-            j += 1
-
-        merged.append(current)
-        i = j
+    merged.append(current)
+    
+    for table in merged:
+        table['num_pages'] = table['page_end'] - table['page_start'] + 1
 
     return merged

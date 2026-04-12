@@ -1,7 +1,18 @@
 import camelot
 import numpy as np
+from ultralytics import YOLO
+from pdf2image import convert_from_path
+from PIL import Image
 
 def extract_tables(input_path, pages_data):
+    tables = extract_tables_camelot(input_path, pages_data)
+
+    if len(tables) == 0:
+        tables = extract_tables_yolov8(input_path, pages_data)
+
+    return tables
+
+def extract_tables_camelot(input_path, pages_data):
     tables = camelot.read_pdf(input_path, pages="all", flavor='lattice')
     
     results = []
@@ -22,12 +33,10 @@ def extract_tables(input_path, pages_data):
         }
 
         results.append(table_info)
-
-        # Debug prints (optional)
-        #print(f"\nPage: {table.page}")
-        #print(f"BBox (converted): {bbox}")
-
+        
     return results
+
+
 
 def camelot_bbox_to_pdfplumber(bbox, page_height):
     x1, y1, x2, y2 = bbox
@@ -38,3 +47,91 @@ def camelot_bbox_to_pdfplumber(bbox, page_height):
         x2,                 # x1
         page_height - y1    # bottom
     ]
+    
+
+
+def extract_tables_yolov8(input_path, pages_data):
+
+    model = YOLO("https://huggingface.co/keremberke/yolov8m-table-extraction/resolve/main/best.pt")
+
+    model.overrides['conf'] = 0.25
+    model.overrides['iou'] = 0.45
+    model.overrides['agnostic_nms'] = False
+    model.overrides['max_det'] = 1000
+
+    tables = []
+
+    images = convert_from_path(input_path)
+
+    for page_index, image in enumerate(images):
+
+        # ✅ YOLO works fine with PIL directly
+        results = model(image)
+
+        pdf_width = pages_data[page_index]["width"]
+        pdf_height = pages_data[page_index]["height"]
+
+        # ✅ Use PIL size (cleaner than numpy)
+        img_width, img_height = image.size
+
+        for r in results:
+            if r.boxes is None:
+                continue
+
+            for box in r.boxes:
+
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                conf = float(box.conf[0])
+
+                # 🔥 Optional: filter low confidence
+                if conf < 0.3:
+                    continue
+
+                bbox = scale_bbox_to_pdf(
+                    (x1, y1, x2, y2),
+                    img_width,
+                    img_height,
+                    pdf_width,
+                    pdf_height
+                )
+
+                if not is_valid_table_bbox(bbox):
+                    continue
+
+                tables.append({
+                    "page_index": page_index,
+                    "bbox": bbox,
+                    "header": [],
+                    "n_cols": 0,
+                    "accuracy": conf,
+                    "source": "yolov8"
+                })
+
+    return tables
+
+def scale_bbox_to_pdf(bbox, img_width, img_height, pdf_width, pdf_height):
+
+    x1, y1, x2, y2 = bbox
+
+    scale_x = pdf_width / img_width
+    scale_y = pdf_height / img_height
+
+    return [
+        x1 * scale_x,
+        y1 * scale_y,
+        x2 * scale_x,
+        y2 * scale_y
+    ]
+
+
+def is_valid_table_bbox(bbox):
+    x1, y1, x2, y2 = bbox
+
+    width = x2 - x1
+    height = y2 - y1
+
+    # 🔥 tune if needed
+    if width < 80 or height < 80:
+        return False
+
+    return True

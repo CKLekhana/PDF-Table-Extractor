@@ -1,6 +1,7 @@
 import json
 import ollama
 import re
+import math
 
 def extract_title_and_page_llm(candidate_texts, header_text, footer_text, page_index):
 
@@ -9,37 +10,79 @@ def extract_title_and_page_llm(candidate_texts, header_text, footer_text, page_i
 
     formatted_candidates = "\n".join([f"- {c}" for c in candidate_texts])
 
+    #print(header_text)
+    #print(footer_text)
+    
+    
     prompt = f"""
-You are an expert in analyzing financial documents.
+                You are an expert in financial document analysis.
 
-INPUT:
+                Your task is to extract:
+                1. The most appropriate table title
+                2. The correct page number
 
-Candidate table titles:
-{formatted_candidates}
+                INPUT:
 
-Page header text:
-{header_text}
+                Candidate lines:
+                {formatted_candidates}
 
-Page footer text:
-{footer_text}
+                Header text:
+                {header_text}
 
-TASKS:
+                Footer text:
+                {footer_text}
 
-1. Select the BEST table title from the candidates.
-2. Extract the page number from header or footer.
+                INSTRUCTIONS:
 
-RULES:
-- Ignore numeric rows or column headers
-- Page number must be a valid integer
-- If no title → "Unknown Title"
-- If no page number → {page_index}
+                TITLE SELECTION:
 
-OUTPUT (STRICT JSON):
-{{
-  "title": "...",
-  "page_number": ...
-}}
-"""
+                - Choose ONLY ONE line from the candidate lines as the table title
+
+                - A valid table title:
+                - is descriptive and complete (usually a phrase or sentence)
+                - often contains financial terms (e.g., Balance Sheet, Statement, Report)
+                - appears above the table OR sometimes inside the table before column headers
+
+                - A valid title usually has:
+                - more than 3 words
+                - natural language structure (not just keywords)
+
+                STRICTLY REJECT candidates that look like column headers:
+                - lines with short phrases separated by spaces or symbols
+                - lines containing repeated financial terms like:
+                "Assets Liabilities Equity"
+                "Revenue Expenses Profit"
+                - lines where most words are single tokens or labels
+                - lines that look like categories rather than a sentence
+
+                STRICTLY IGNORE:
+                - numeric-heavy lines
+                - column headers
+                - names of people, organizations, or addresses
+                - header/footer content
+                - lines containing IDs, codes, or financial account numbers
+
+                VERY IMPORTANT:
+                - Column headers are NOT titles
+                - NEVER return column headers as title
+
+                PAGE NUMBER EXTRACTION:
+
+                - Extract a valid integer ONLY from header or footer
+                - Do NOT infer or generate numbers
+                - Ignore years, dates, and section numbers
+
+                OUTPUT RULES:
+                - If no valid title → "Unknown Title"
+                - If no valid page number → {page_index + 1}
+                - Output ONLY valid JSON (no extra text)
+
+                OUTPUT FORMAT:
+                {{
+                "title": "string",
+                "page_number": integer
+                }}
+            """
 
     try:
         response = ollama.chat(
@@ -56,23 +99,29 @@ OUTPUT (STRICT JSON):
             )
 
         content = response["message"]["content"]
-
+        #print(content)
         result = safe_json_parse(content)
 
         if result is None:
             raise ValueError("Invalid JSON")
 
         title = result.get("title", "Unknown Title")
-        page_number = result.get("page_number", page_index)
-
+        page_number = result.get("page_number", page_index + 1)
+        
+        #print(content)
+        
+        #print(page_number, page_index)
         try:
             page_number = int(page_number)
         except:
-            page_number = page_index
+            page_number = page_index + 1
+
+        
+#        print(response)
 
         return {
             "title": title,
-            "page_number": page_number
+            "page_number": page_number, 
         }
 
     except Exception as e:
@@ -80,7 +129,7 @@ OUTPUT (STRICT JSON):
 
         return {
             "title": fallback_title(candidate_texts),
-            "page_number": page_index
+            "page_number": page_index + 1
         }
         
         
@@ -146,3 +195,4 @@ def safe_json_parse(content):
             except:
                 pass
     return None
+

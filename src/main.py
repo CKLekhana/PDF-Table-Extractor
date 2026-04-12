@@ -7,7 +7,7 @@ from src.table_extractor import extract_tables
 from src.map_text_to_tables import match_lines_to_table
 from src.page_header_footer_detector import extract_header_footer
 from src.title_page_number_extractor import extract_title_and_page_llm
-from src.table_merger import merge_multipage_tables, collect_group_candidates, deduplicate, merge_after_llm
+from src.table_merger import merge_multipage_tables, collect_group_candidates_v2, deduplicate, merge_after_llm
 
 def process_pdf(input_path, output_path):
     
@@ -23,6 +23,7 @@ def process_pdf(input_path, output_path):
 
     # Step 2 : Extract tables from the page
     tables = extract_tables(input_path, pages)
+    #print(len(tables))
     
     # Step 3 : Extract header footer
     page_header_footer = {}
@@ -46,8 +47,9 @@ def process_pdf(input_path, output_path):
 
         first_page = group["tables"][0]["page_index"]
         last_page = group["tables"][-1]["page_index"]
+        num_pages = len(group["tables"])
 
-        candidates, headers, footers, group_accuracy = collect_group_candidates(
+        candidates, headers, footers, group_accuracy = collect_group_candidates_v2(
             group, pages, page_header_footer
         )
 
@@ -55,6 +57,9 @@ def process_pdf(input_path, output_path):
         headers = deduplicate(headers)
         footers = deduplicate(footers)
 
+        #print(candidates)
+        
+        
         if not candidates:
             candidates = ["Unknown Title"]
 
@@ -69,24 +74,25 @@ def process_pdf(input_path, output_path):
         )
 
         llm_page = title_page_number["page_number"]
+        #print(llm_page)
 
         results.append({
             "title": title_page_number["title"],
             "page_start": llm_page if llm_page else first_page,
-            "page_end": last_page,
-            "table accuracy": group_accuracy,
-            "num_pages": len(group["tables"])
+            "page_end": llm_page + num_pages - 1 if llm_page else last_page,
+            "num_pages": num_pages,
+            "table accuracy": group_accuracy
         })
 
 
     # 🔥 Post-LLM merge
-    #results = merge_after_llm(results)
+    results = merge_after_llm(results)
     
-     
+    ''' 
     for res in results:
         print("-------------------------")
         print(res)
-        print("-------------------------")
+        print("-------------------------")'''
         
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
