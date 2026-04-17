@@ -46,6 +46,7 @@ def process_pdf(input_path, output_path):
     
     results = []
 
+    # merge tables based on the table metadata extracted
     merged_tables = merge_multipage_tables(tables)
 
     for group in merged_tables:
@@ -90,7 +91,7 @@ def process_pdf(input_path, output_path):
         })
 
 
-    # 🔥 Post-LLM merge
+    # Post-LLM merge
     results = merge_after_llm(results)
     
     ''' 
