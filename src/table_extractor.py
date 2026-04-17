@@ -48,10 +48,6 @@ def extract_tables_camelot(input_path, pages_data):
 
     return results
 
-
-
-
-
 def camelot_bbox_to_pdfplumber(bbox, page_height):
     x1, y1, x2, y2 = bbox
 
@@ -62,8 +58,6 @@ def camelot_bbox_to_pdfplumber(bbox, page_height):
         page_height - y1    # bottom
     ]
     
-
-
 def extract_tables_yolov8(input_path, pages_data):
 
     model = YOLO("https://huggingface.co/keremberke/yolov8m-table-extraction/resolve/main/best.pt")
@@ -142,7 +136,6 @@ def scale_bbox_to_pdf(bbox, img_width, img_height, pdf_width, pdf_height):
         x2 * scale_x,
         y2 * scale_y
     ]
-
 
 def is_valid_table_bbox(bbox):
     x1, y1, x2, y2 = bbox
